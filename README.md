@@ -10,7 +10,6 @@ A minimal AWS CDK stack that deploys a serverless, read-through cache for the St
 - **Lambda (Python 3.11)**: fetches from cache first; on miss, calls SteamApis and writes to DynamoDB
 - **DynamoDB**: pay-per-request table with composite key and TTL (`ttl`) for automatic expiry
 - **Security**: API key required, rate limiting, and usage quotas
-- **CORS**: permissive `*` for quick client integration
 - **Outputs**: API Gateway base URL + API key + DynamoDB table name
 
 ## Architecture
@@ -170,24 +169,14 @@ curl -s -H "X-API-Key: $API_KEY" "$BASE_URL/item/$APP_ID/$NAME" | jq
 - **Lambda**: Per-ms execution + requests.
 - **API Gateway (HTTP API)**: Per request.
 
-Keep TTLs sensible to minimise origin calls to SteamApis.
 
 ## Troubleshooting
 
-### `ModuleNotFoundError: No module named 'requests'`
-You're likely in a region where the referenced AWS layer ARN doesn't exist or doesn't include `requests`.
-
-See "Alternative: bundle your own dependencies" below, or switch to a region-appropriate layer ARN.
 
 ### `403/401 from SteamApis`
 - Check `STEAMAPIS_KEY` is valid and set at deploy time.
 - Confirm the Lambda environment variable resolved: look in the Lambda console → Configuration → Environment variables.
 
-### Cache never hits
-The cache uses a composite key `{app_id, market_hash_name}` to prevent collisions. Check that both parameters are being passed correctly.
-
-### CORS errors in browser
-CORS is set to `*` by default for quick testing. If you locked it down, make sure your site origin is allowed.
 
 ## Design notes & caveats
 
@@ -250,50 +239,6 @@ boto3
 
 Deploy as normal.
 
-## Local development tips
-
-**Tail logs while testing:**
-```bash
-npx cdk deploy
-aws logs tail /aws/lambda/PriceFetcherLambda --follow --since 1h
-```
-
-**Invoke Lambda directly** (via console or `aws lambda invoke`) with a sample API Gateway event:
-```json
-{
-  "pathParameters": {
-    "app_id": "730",
-    "market_hash_name": "AK-47 | Redline (Field-Tested)"
-  }
-}
-```
-
-## Security
-
-- Don't hard-code API keys. Provide `STEAMAPIS_KEY` at deploy time (as shown), or store it in AWS Secrets Manager and load it in the Lambda at startup.
-- Scope IAM permissions tightly; currently the Lambda has read/write access only to the cache table created by the stack.
-
-## Cleaning up
-
-Destroy all resources to avoid charges:
-```bash
-npx cdk destroy
-```
-
-The stack sets `removalPolicy: DESTROY` on the DynamoDB table, so it will be deleted with the stack.
-
 ## License
 
 MIT (or choose your own). Add a LICENSE file if you intend to open-source.
-
-## Roadmap / nice-to-haves
-
-- ✅ ~~Composite key: `{ app_id, market_hash_name }`~~ **DONE**
-- ✅ ~~Structured retries + circuit breaker to origin~~ **DONE**
-- ✅ ~~API key authentication~~ **DONE**
-- Per-item configurable TTLs
-- Expose more fields from the SteamApis response (beyond buy/sell)
-- Metrics + dashboards (CloudWatch / embedded metrics)
-- WAF for additional protection
-
-Happy caching.
